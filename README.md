@@ -14,6 +14,7 @@
 - **Flexible Configuration**: Настройка через CLI параметры или переменные окружения
 - **High Performance**: Оптимизирован для обработки высоких нагрузок с pull-based подписками
 - **Production Ready**: Готов к использованию в production среде с HA поддержкой
+- **Docker Support**: Готовые Docker образы для развертывания
 
 ## 📦 Установка
 
@@ -31,23 +32,32 @@ make build
 go build -o events-audit .
 ```
 
-### Сборка с примерами
+### Docker образы
 
 ```bash
-make build build-sender
+# Сборка образа с готовым бинарником
+make docker-build-binary
+
+# Сборка образа с multistage сборкой
+make docker-build-multistage
+
+# Сборка обоих образов
+make docker-build-all
 ```
 
 ## 🔧 Быстрый старт
 
-### 1. Запуск NATS JetStream сервера (Docker)
+### Локальный запуск
+
+#### 1. Запуск NATS JetStream сервера (Docker)
 
 ```bash
-make docker-up
+make compose-up
 # или
 docker-compose up -d
 ```
 
-### 2. Запуск сервера аудита
+#### 2. Запуск сервера аудита
 
 ```bash
 # Базовый запуск с JetStream
@@ -57,17 +67,34 @@ docker-compose up -d
 make run
 ```
 
-### 3. Отправка тестовых событий в JetStream
+### Docker запуск
+
+#### Запуск через docker-compose
 
 ```bash
-# В отдельном терминале
-make sender
+# Запуск всех сервисов (NATS + Events Audit)
+make compose-up
+
+# Просмотр логов
+make compose-logs
+
+# Остановка
+make compose-down
 ```
 
-### 4. Полная демонстрация JetStream
+#### Запуск Docker образов напрямую
 
 ```bash
-make demo
+# Запуск binary образа
+make docker-run-binary
+
+# Запуск multistage образа
+make docker-run-multistage
+
+# Или напрямую
+docker run --rm -p 8080:8080 events-audit:binary \
+  --audit nats \
+  --audit-nats-addr nats://host.docker.internal:4222
 ```
 
 ## 🎯 Использование
@@ -125,49 +152,29 @@ export AUDIT_LISTNER_LOG_FORMAT=json
 ./events-audit
 ```
 
-## ⚙️ Конфигурация JetStream
+## ⚙️ Полная конфигурация
 
-### Основные параметры
+### Таблица всех параметров
 
-| Параметр | Переменная окружения | Описание | По умолчанию |
-|----------|---------------------|----------|--------------|
-| `--audit` | `AUDIT_LISTNER_AUDIT` | Тип аудита (`nats`, `nsq`, `nope`) | `nope` |
-| `--audit-nats-addr` | `AUDIT_LISTNER_AUDIT_NATS_ADDR` | Адрес NATS сервера | - |
-| `--audit-topic` | `AUDIT_LISTNER_AUDIT_TOPIC` | Subject pattern для подписки | `accountats` |
-
-### JetStream конфигурация
-
-| Параметр | Переменная окружения | Описание | По умолчанию |
-|----------|---------------------|----------|--------------|
-| `--audit-stream-name` | `AUDIT_LISTNER_AUDIT_STREAM_NAME` | Имя JetStream потока | `EVENTS` |
-| `--audit-consumer-name` | `AUDIT_LISTNER_AUDIT_CONSUMER_NAME` | Имя consumer | `events-audit-consumer` |
-| `--audit-durable-name` | `AUDIT_LISTNER_AUDIT_DURABLE_NAME` | Имя durable consumer | `events-audit-durable` |
-| `--audit-create-stream` | `AUDIT_LISTNER_AUDIT_CREATE_STREAM` | Создавать поток автоматически | `true` |
-
-### Обработка сообщений
-
-| Параметр | Переменная окружения | Описание | По умолчанию |
-|----------|---------------------|----------|--------------|
-| `--audit-max-deliver` | `AUDIT_LISTNER_AUDIT_MAX_DELIVER` | Максимум попыток доставки | `3` |
-| `--audit-ack-wait` | `AUDIT_LISTNER_AUDIT_ACK_WAIT` | Время ожидания ACK | `30s` |
-| `--audit-pull-max-messages` | `AUDIT_LISTNER_AUDIT_PULL_MAX_MESSAGES` | Максимум сообщений за раз | `10` |
-| `--audit-pull-timeout` | `AUDIT_LISTNER_AUDIT_PULL_TIMEOUT` | Timeout для pull запросов | `5s` |
-
-### Хранение потока
-
-| Параметр | Переменная окружения | Описание | По умолчанию |
-|----------|---------------------|----------|--------------|
-| `--audit-stream-max-age` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_AGE` | Максимальный возраст сообщений | `24h` |
-| `--audit-stream-max-bytes` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_BYTES` | Максимум байт в потоке | `1GB` |
-| `--audit-stream-max-msgs` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_MSGS` | Максимум сообщений в потоке | `1000000` |
-| `--audit-stream-replicas` | `AUDIT_LISTNER_AUDIT_STREAM_REPLICAS` | Количество реплик потока | `1` |
-
-### Логирование
-
-| Параметр | Переменная окружения | Описание | По умолчанию |
-|----------|---------------------|----------|--------------|
-| `--log-level` | `AUDIT_LISTNER_LOG_LEVEL` | Уровень логирования | `debug` |
-| `--log-format` | `AUDIT_LISTNER_LOG_FORMAT` | Формат логов (`text`/`json`) | `text` |
+| Категория | Параметр | Переменная окружения | Тип | По умолчанию | Описание |
+|-----------|----------|---------------------|-----|--------------|----------|
+| **Основные** | `--audit` | `AUDIT_LISTNER_AUDIT` | string | `nope` | Тип аудита (`nats`, `nsq`, `nope`) |
+| | `--audit-nats-addr` | `AUDIT_LISTNER_AUDIT_NATS_ADDR` | string | - | Адрес NATS сервера |
+| | `--audit-topic` | `AUDIT_LISTNER_AUDIT_TOPIC` | string | `accountats` | Subject pattern для подписки |
+| **Логирование** | `--log-level` | `AUDIT_LISTNER_LOG_LEVEL` | string | `debug` | Уровень логирования (`debug`, `info`, `warn`, `error`) |
+| | `--log-format` | `AUDIT_LISTNER_LOG_FORMAT` | string | `text` | Формат логов (`text`, `json`) |
+| **JetStream Поток** | `--audit-stream-name` | `AUDIT_LISTNER_AUDIT_STREAM_NAME` | string | `EVENTS` | Имя JetStream потока |
+| | `--audit-create-stream` | `AUDIT_LISTNER_AUDIT_CREATE_STREAM` | bool | `true` | Создавать поток автоматически |
+| | `--audit-stream-max-age` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_AGE` | duration | `24h0m0s` | Максимальный возраст сообщений в потоке |
+| | `--audit-stream-max-bytes` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_BYTES` | int64 | `1073741824` | Максимум байт в потоке (1GB) |
+| | `--audit-stream-max-msgs` | `AUDIT_LISTNER_AUDIT_STREAM_MAX_MSGS` | int64 | `1000000` | Максимум сообщений в потоке |
+| | `--audit-stream-replicas` | `AUDIT_LISTNER_AUDIT_STREAM_REPLICAS` | int | `1` | Количество реплик потока |
+| **JetStream Consumer** | `--audit-consumer-name` | `AUDIT_LISTNER_AUDIT_CONSUMER_NAME` | string | `events-audit-consumer` | Имя consumer |
+| | `--audit-durable-name` | `AUDIT_LISTNER_AUDIT_DURABLE_NAME` | string | `events-audit-durable` | Имя durable consumer |
+| | `--audit-max-deliver` | `AUDIT_LISTNER_AUDIT_MAX_DELIVER` | int | `3` | Максимум попыток доставки |
+| | `--audit-ack-wait` | `AUDIT_LISTNER_AUDIT_ACK_WAIT` | duration | `30s` | Время ожидания ACK |
+| **Pull конфигурация** | `--audit-pull-max-messages` | `AUDIT_LISTNER_AUDIT_PULL_MAX_MESSAGES` | int | `10` | Максимум сообщений за раз |
+| | `--audit-pull-timeout` | `AUDIT_LISTNER_AUDIT_PULL_TIMEOUT` | duration | `5s` | Timeout для pull запросов |
 
 ### Примеры NATS URL
 
@@ -186,6 +193,63 @@ tls://localhost:4443
 
 # С токеном
 nats://token@localhost:4222
+```
+
+## 🐳 Docker конфигурация
+
+### Доступные Docker образы
+
+| Образ | Размер | Описание | Использование |
+|-------|--------|----------|---------------|
+| `events-audit:binary` | ~33MB | Alpine + готовый бинарник | Production, быстрая сборка |
+| `events-audit:multistage` | ~9MB | Scratch + статическая сборка | CI/CD, минимальный размер |
+
+### Docker команды
+
+```bash
+# Сборка образов
+make docker-build-binary      # Сборка образа с готовым бинарником
+make docker-build-multistage  # Сборка с multistage
+make docker-build-all         # Сборка обоих образов
+
+# Запуск контейнеров
+make docker-run-binary        # Запуск binary образа
+make docker-run-multistage    # Запуск multistage образа
+
+# Docker Compose
+make compose-up              # Запуск всех сервисов
+make compose-down            # Остановка сервисов
+make compose-logs            # Просмотр логов
+make compose-restart         # Перезапуск сервисов
+
+# Очистка
+make docker-clean            # Удаление Docker образов
+```
+
+### Docker Compose конфигурация
+
+Docker Compose включает:
+- **events-audit**: Приложение на основе binary образа
+- **nats**: NATS JetStream сервер
+- **Переменные окружения**: Настройки для подключения к NATS
+- **Health checks**: Проверка готовности сервисов
+- **Сети**: Внутренняя сеть для взаимодействия сервисов
+- **Хранилище**: Персистентность данных NATS
+
+### Переменные окружения в Docker
+
+```yaml
+# Пример конфигурации в docker-compose.yml
+environment:
+  - AUDIT_LISTNER_AUDIT=nats
+  - AUDIT_LISTNER_AUDIT_NATS_ADDR=nats://nats:4222
+  - AUDIT_LISTNER_LOG_LEVEL=info
+  - AUDIT_LISTNER_LOG_FORMAT=json
+  - AUDIT_LISTNER_AUDIT_TOPIC=accountats
+  - AUDIT_LISTNER_AUDIT_STREAM_NAME=EVENTS
+  - AUDIT_LISTNER_AUDIT_CONSUMER_NAME=events-audit-durable
+  - AUDIT_LISTNER_AUDIT_DURABLE_NAME=events-audit-durable
+  - AUDIT_LISTNER_AUDIT_CREATE_STREAM=true
 ```
 
 ## 📋 JetStream Features
@@ -323,15 +387,28 @@ go test -bench=. ./internal/nats
 make help               # Показать все доступные команды
 make build              # Собрать приложение
 make test               # Запустить тесты
-make docker-up          # Запустить NATS JetStream сервер
-make docker-down        # Остановить NATS сервер
-make sender             # Отправить тестовые события
-make demo               # Полная демонстрация JetStream
-make demo-performance   # Высокопроизводительная демонстрация
+
+# Docker команды
+make docker-build-binary      # Сборка binary образа
+make docker-build-multistage  # Сборка multistage образа
+make docker-build-all         # Сборка всех образов
+make docker-run-binary        # Запуск binary образа
+make docker-run-multistage    # Запуск multistage образа
+make docker-clean            # Очистка образов
+
+# Docker Compose команды
+make compose-up              # Запуск сервисов
+make compose-down            # Остановка сервисов
+make compose-logs            # Просмотр логов
+make compose-restart         # Перезапуск сервисов
+make compose-test            # Тестирование сервисов
+
+# NATS команды
 make nats-status        # Проверить состояние NATS
 make nats-streams       # Показать JetStream потоки
 make nats-consumers     # Показать consumers
 make nats-monitor       # Мониторинг метрик
+
 make clean              # Очистить артефакты сборки
 ```
 
@@ -354,7 +431,7 @@ docker-compose down
 
 - **4222** - NATS client connections
 - **8222** - HTTP management interface с JetStream метриками
-- **6222** - NATS cluster connections
+- **8080** - Events Audit сервер (в Docker Compose)
 
 ### Management Interface
 
@@ -416,6 +493,7 @@ BenchmarkEventLogger_HandleRawEvent-24        712218    1722 ns/op
    - `--audit-stream-max-bytes=10GB-100GB` в зависимости от объема
 4. **HA конфигурация**: `--audit-stream-replicas=3` для кластера
 5. **Ресурсы**: Рекомендуется: 512MB RAM, 2 CPU cores, SSD storage
+6. **Docker**: Используйте `events-audit:binary` для production развертывания
 
 ## 🚨 Troubleshooting
 
@@ -467,6 +545,18 @@ make nats-streams
 --audit-stream-max-bytes=1GB
 ```
 
+**6. Docker проблемы**
+```bash
+# Проверьте статус контейнеров
+docker-compose ps
+
+# Проверьте логи приложения
+docker-compose logs events-audit
+
+# Пересоберите образы
+make docker-build-all
+```
+
 ## 🔧 Разработка
 
 ### Структура проекта
@@ -481,10 +571,15 @@ vsfi-2025-events-audit/
 │   │   └── handler_test.go        # Тесты
 │   └── server/
 │       └── server.go              # Основная логика сервера
+├── package/
+│   └── docker/                    # Docker конфигурации
+│       ├── Dockerfile.binary      # Docker образ с готовым бинарником
+│       ├── Dockerfile.multistage  # Multi-stage Docker образ
+│       └── README.md              # Docker документация
 ├── examples/
 │   └── sender.go                  # Пример отправки в JetStream
-├── docker-compose.yml             # NATS JetStream сервер
-├── Makefile                       # Автоматизация с JetStream командами
+├── docker-compose.yml             # NATS JetStream + Events Audit
+├── Makefile                       # Автоматизация с Docker и JetStream командами
 ├── test.sh                        # Тестовые скрипты для JetStream
 ├── .env.example                   # Примеры конфигурации JetStream
 └── README.md                      # Документация
@@ -517,7 +612,7 @@ vsfi-2025-events-audit/
 - **NATS**: 2.10 или выше с JetStream
 - **Storage**: SSD рекомендуется для JetStream (особенно в production)
 - **Memory**: Минимум 512MB для JetStream workloads
-- **Docker**: для запуска NATS JetStream сервера (опционально)
+- **Docker**: для запуска NATS JetStream сервера и контейнеризации приложения
 
 ## 📚 Зависимости
 
@@ -531,6 +626,7 @@ vsfi-2025-events-audit/
 - [NATS JetStream Documentation](https://docs.nats.io/nats-concepts/jetstream)
 - [NATS Go Client](https://github.com/nats-io/nats.go)
 - [JetStream Best Practices](https://docs.nats.io/running-a-nats-service/nats_admin/jetstream_admin)
+- [Docker Documentation](package/docker/README.md)
 
 ## 📄 Лицензия
 
@@ -539,10 +635,3 @@ vsfi-2025-events-audit/
 ## 🤝 Поддержка
 
 Для вопросов и предложений создавайте Issues в репозитории проекта.
-
----
-
-**Версия**: 2.0.0 (JetStream)  
-**Автор**: [Ваше имя]  
-**Последнее обновление**: 11.01.2025  
-**JetStream**: ✅ Enabled
