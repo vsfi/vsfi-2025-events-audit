@@ -1,0 +1,28 @@
+# Dockerfile for using pre-built binary
+FROM alpine:3.19
+
+# Install ca-certificates for HTTPS connections
+RUN apk --no-cache add ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -g 1001 appuser && \
+    adduser -D -u 1001 -G appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy the pre-built binary
+COPY events-audit /app/events-audit
+
+# Change ownership to non-root user
+RUN chown appuser:appuser /app/events-audit && \
+    chmod +x /app/events-audit
+
+# Switch to non-root user
+USER appuser
+
+# Expose port (if needed)
+EXPOSE 8080
+
+# Set default command
+ENTRYPOINT ["/app/events-audit"]

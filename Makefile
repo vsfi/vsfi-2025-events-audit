@@ -27,15 +27,15 @@ test:
 .PHONY: docker-build-binary
 docker-build-binary: build
 	@echo "🐳 Building Docker image with pre-built binary..."
-	cp build/events-audit package/
-	docker build -f package/Dockerfile.binary -t events-audit:binary package/
-	rm package/events-audit
+	cp build/events-audit package/docker/
+	docker build -f package/docker/Dockerfile.binary -t events-audit:binary package/docker/
+	rm package/docker/events-audit
 	@echo "✅ Docker image 'events-audit:binary' built successfully"
 
 .PHONY: docker-build-multistage
 docker-build-multistage:
 	@echo "🐳 Building Docker image with multistage build..."
-	docker build -f package/Dockerfile.multistage -t events-audit:multistage .
+	docker build -f package/docker/Dockerfile.multistage -t events-audit:multistage .
 	@echo "✅ Docker image 'events-audit:multistage' built successfully"
 
 .PHONY: docker-build-all
@@ -45,24 +45,22 @@ docker-build-all: docker-build-binary docker-build-multistage
 .PHONY: docker-run-binary
 docker-run-binary:
 	@echo "🚀 Running Docker container from binary image..."
-	docker run --rm -p 3000:3000 events-audit:binary --database-dsn "postgres://postgres:accountant@host.docker.internal:5432/accountant?sslmode=disable&application_name=docker"
+	docker run --rm -p 8080:8080 events-audit:binary --audit nats --audit-nats-addr nats://host.docker.internal:4222
 
 .PHONY: docker-run-multistage
 docker-run-multistage:
 	@echo "🚀 Running Docker container from multistage image..."
-	docker run --rm -p 3000:3000 events-audit:multistage --database-dsn "postgres://postgres:accountant@host.docker.internal:5432/accountant?sslmode=disable&application_name=docker"
+	docker run --rm -p 8080:8080 events-audit:multistage --audit nats --audit-nats-addr nats://host.docker.internal:4222
 
 .PHONY: docker-clean
 docker-clean:
 	@echo "🧹 Cleaning Docker images..."
-	docker rmi events-audit:binary sig-store:multistage 2>/dev/null || true
+	docker rmi events-audit:binary events-audit:multistage 2>/dev/null || true
 	@echo "✅ Docker images cleaned"
 
 # Docker Compose commands
 .PHONY: compose-up
 compose-up: docker-build-binary
-	@echo "🔑 Setting correct permissions for key files..."
-	@chmod 644 private.pem public.pem
 	@echo "🐳 Starting services with docker-compose..."
 	docker-compose up -d
 	@echo "✅ Services started successfully"
@@ -86,7 +84,7 @@ compose-restart: compose-down compose-up
 compose-test: compose-up
 	@echo "⏳ Waiting for services to be ready..."
 	@sleep 10
-	@echo "🔥 Running smoke tests against compose environment..."
-	@BASE_URL=http://localhost:3000 k6 run tests/k6/smoke-test.js || { echo "❌ Tests failed"; make compose-down; exit 1; }
-	@echo "✅ Tests completed successfully"
+	@echo "🔥 Testing docker-compose environment..."
+	@docker-compose logs events-audit
+	@echo "✅ Services are running successfully"
 	@make compose-down

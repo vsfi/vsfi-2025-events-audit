@@ -1,0 +1,50 @@
+# Dockerfile with multistage build
+FROM golang:1.23-alpine AS builder
+
+# Install git and ca-certificates (needed for go modules)
+RUN apk --no-cache add git ca-certificates tzdata
+
+# Create appuser for final stage
+RUN adduser -D -g '' appuser
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o events-audit ./
+
+# Final stage
+FROM scratch
+
+# Import ca-certificates from builder
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Import timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Import user and group files
+COPY --from=builder /etc/passwd /etc/passwd
+
+# Copy the binary
+COPY --from=builder /build/events-audit /events-audit
+
+# Use non-root user
+USER appuser
+
+# Expose port (if needed)
+EXPOSE 8080
+
+# Set default command
+ENTRYPOINT ["/events-audit"]

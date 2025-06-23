@@ -1,30 +1,43 @@
-version: '3.8'
-
 services:
+  events-audit:
+    image: events-audit:binary
+    container_name: events-audit-app
+    ports:
+      - "8080:8080"
+    environment:
+      - AUDIT_LISTNER_AUDIT=nats
+      - AUDIT_LISTNER_AUDIT_NATS_ADDR=nats://nats:4222
+      - AUDIT_LISTNER_LOG_LEVEL=info
+      - AUDIT_LISTNER_LOG_FORMAT=json
+      - AUDIT_LISTNER_AUDIT_TOPIC=accountats
+      - AUDIT_LISTNER_AUDIT_STREAM_NAME=EVENTS
+      - AUDIT_LISTNER_AUDIT_CONSUMER_NAME=events-audit-durable
+      - AUDIT_LISTNER_AUDIT_DURABLE_NAME=events-audit-durable
+      - AUDIT_LISTNER_AUDIT_CREATE_STREAM=true
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   nats:
     image: nats:2.10-alpine
     container_name: nats-jetstream-server
     ports:
       - "4222:4222"  # Client connections
       - "8222:8222"  # HTTP management port
-      - "6222:6222"  # Cluster connections
     command: [
       "--jetstream",
       "--store_dir=/data",
       "--http_port=8222",
-      "--port=4222",
-      "--max_memory_store=1GB",
-      "--max_file_store=10GB",
-      "--cluster_name=jetstream-cluster",
-      "--cluster=nats://0.0.0.0:6222",
-      "--log_file=/data/nats-server.log",
-      "--debug=false",
-      "--trace=false"
+      "--port=4222"
     ]
     volumes:
       - nats_jetstream_data:/data
-    environment:
-      - NATS_SERVER_NAME=nats-jetstream-local
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
       interval: 10s
