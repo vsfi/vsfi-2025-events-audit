@@ -1,5 +1,5 @@
 # Dockerfile with multistage build
-FROM golang:1.23-alpine AS builder
+FROM registry.vsfi.ru/library/golang:1.23-alpine AS builder
 
 # Install git and ca-certificates (needed for go modules)
 RUN apk --no-cache add git ca-certificates tzdata
