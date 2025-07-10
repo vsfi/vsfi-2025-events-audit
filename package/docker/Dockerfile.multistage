@@ -1,11 +1,12 @@
 # Dockerfile with multistage build
-FROM registry.vsfi.ru/library/golang:1.23-alpine AS builder
-
+FROM registry.vsfi.ru/library/golang:1.23-bookworm AS builder
+RUN printf "deb [trusted=yes] https://nexus.vsfi.ru/repository/debian-12/ bookworm main non-free-firmware\ndeb [trusted=yes] https://nexus.vsfi.ru/repository/debian-12/ bookworm-updates main non-free-firmware\ndeb [trusted=yes] https://nexus.vsfi.ru/repository/debian-12-security/ bookworm-security main\ndeb [trusted=yes] https://nexus.vsfi.ru/repository/apt-docker/ bookworm stable\n" > /etc/apt/sources.list
+RUN printf "machine nexus.vsfi.ru\nlogin debian\npassword debian\n" > /etc/apt/auth.conf
 # Install git and ca-certificates (needed for go modules)
-RUN apk --no-cache add git ca-certificates tzdata
+RUN  apt update && apt install -y git ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 
 # Create appuser for final stage
-RUN adduser -D -g '' appuser
+RUN adduser --disabled-password appuser
 
 # Set working directory
 WORKDIR /build
@@ -14,7 +15,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 
 # Download dependencies
-RUN go mod download
+RUN GOPROXY=https://go-proxy-user:fn298f0g21fwr@nexus.vsfi.ru/repository/go-mod-shisha-server go mod download -x
 
 # Copy source code
 COPY . .
