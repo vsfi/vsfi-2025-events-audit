@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 
 	"events-audit/internal/constants"
 	"events-audit/internal/server"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 	"github.com/juju/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
@@ -45,7 +48,38 @@ func beforeAction(ctx context.Context, c *cli.Command) (context.Context, error) 
 	return ctx, nil
 }
 
+func healthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		render.JSON(w, r, map[string]any{
+			"Status": "OK",
+		})
+	}
+}
+func startHealth(addr string) error {
+
+	r := chi.NewRouter()
+
+	r.Get("/health", healthHandler())
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+	go func() {
+
+		err := srv.ListenAndServe()
+		if err != nil {
+			logrus.WithError(err).Error("failed server start")
+		}
+	}()
+	return nil
+
+}
 func mainAction(ctx context.Context, c *cli.Command) error {
+
+	listenAddr := c.String("health-addr")
 	// Check if audit is enabled
 	auditType := c.String("audit")
 	if auditType == "nope" {
@@ -81,6 +115,10 @@ func mainAction(ctx context.Context, c *cli.Command) error {
 		LogLevel:        c.String("log-level"),
 		LogFormat:       c.String("log-format"),
 	}
+	err := startHealth(listenAddr)
+	if err != nil {
+		return nil
+	}
 
 	// Create and run the server
 	srv := server.NewServer(config)
@@ -101,6 +139,14 @@ func createBaseFlags() []cli.Flag {
 			Usage:    "logger format `text` or `json`",
 			Value:    "text",
 			Sources:  cli.EnvVars("AUDIT_LISTNER_LOG_FORMAT"),
+			Category: "base",
+		},
+
+		&cli.StringFlag{
+			Name:     "health-addr",
+			Usage:    "health addr ",
+			Value:    ":3000",
+			Sources:  cli.EnvVars("AUDIT_LISTNER_HEALTH_ADDR"),
 			Category: "base",
 		},
 	}
