@@ -1,5 +1,5 @@
 # Dockerfile for using pre-built binary
-FROM alpine:3.19
+FROM regisytry.vsfi.ru/library/alpine:3.19
 
 # Install ca-certificates for HTTPS connections
 RUN apk --no-cache add ca-certificates tzdata

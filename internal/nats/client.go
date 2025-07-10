@@ -233,29 +233,65 @@ func (c *Client) logStreamReady(streamInfo *nats.StreamInfo) {
 	}).Info("JetStream stream ready")
 }
 
+// ensureConsumer creates or recreates consumer with proper configuration.
+func (c *Client) ensureConsumer(consumerConfig *nats.ConsumerConfig) (*nats.ConsumerInfo, error) {
+	// Try to get existing consumer
+	existingConsumer, err := c.js.ConsumerInfo(c.config.StreamName, c.config.DurableName)
+	if err != nil && !errors.Is(err, nats.ErrConsumerNotFound) {
+		return nil, fmt.Errorf("failed to get consumer info: %w", err)
+	}
+
+	// If consumer exists, check if it's configured correctly for pull-based subscription
+	if existingConsumer != nil {
+		if existingConsumer.Config.DeliverSubject != "" {
+			// Consumer has DeliverSubject, it's push-based, need to delete and recreate
+			c.logger.WithField("consumer", c.config.DurableName).Warn("Found push-based consumer, deleting to recreate as pull-based")
+
+			if deleteErr := c.js.DeleteConsumer(c.config.StreamName, c.config.DurableName); deleteErr != nil {
+				return nil, fmt.Errorf("failed to delete existing push-based consumer: %w", deleteErr)
+			}
+
+			c.logger.WithField("consumer", c.config.DurableName).Info("Deleted existing push-based consumer")
+		} else {
+			// Consumer is already pull-based, can reuse it
+			c.logger.WithField("consumer", c.config.DurableName).Info("Found existing pull-based consumer, reusing")
+			return existingConsumer, nil
+		}
+	}
+
+	// Create new pull-based consumer
+	consumerInfo, err := c.js.AddConsumer(c.config.StreamName, consumerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pull-based consumer: %w", err)
+	}
+
+	c.logger.WithField("consumer", c.config.DurableName).Info("Created new pull-based consumer")
+	return consumerInfo, nil
+}
+
 // Subscribe creates a durable consumer and subscribes to messages.
 func (c *Client) Subscribe(ctx context.Context, handler EventHandler) error {
 	if c.js == nil {
 		return errors.New("JetStream context not initialized")
 	}
 
-	// Consumer configuration
+	// Consumer configuration for pull-based subscription
 	consumerConfig := &nats.ConsumerConfig{
-		Name:           c.config.ConsumerName,
-		Durable:        c.config.DurableName,
-		DeliverPolicy:  nats.DeliverPolicy(c.config.DeliverPolicy),
-		ReplayPolicy:   nats.ReplayPolicy(c.config.ReplayPolicy),
-		AckPolicy:      nats.AckExplicitPolicy,
-		AckWait:        c.config.AckWait,
-		MaxDeliver:     c.config.MaxDeliver,
-		FilterSubject:  c.config.Subject,
-		DeliverSubject: nats.NewInbox(),
+		Name:          c.config.ConsumerName,
+		Durable:       c.config.DurableName,
+		DeliverPolicy: nats.DeliverPolicy(c.config.DeliverPolicy),
+		ReplayPolicy:  nats.ReplayPolicy(c.config.ReplayPolicy),
+		AckPolicy:     nats.AckExplicitPolicy,
+		AckWait:       c.config.AckWait,
+		MaxDeliver:    c.config.MaxDeliver,
+		FilterSubject: c.config.Subject,
+		// DeliverSubject removed for pull-based subscription
 	}
 
 	// Create or get consumer
-	consumerInfo, err := c.js.AddConsumer(c.config.StreamName, consumerConfig)
+	consumerInfo, err := c.ensureConsumer(consumerConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create consumer: %w", err)
+		return fmt.Errorf("failed to ensure consumer: %w", err)
 	}
 
 	c.consumer = *consumerInfo
